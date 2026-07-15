@@ -1,0 +1,32 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: VITE_API_BASE
+          script: |
+            set -e
+            if [ ! -d "$HOME/MotionMatching/.git" ]; then
+              git clone https://github.com/TFUCE/MotionMatching.git "$HOME/MotionMatching"
+            fi
+            # 拉到含 deploy.sh 的最新代码后再执行
+            cd "$HOME/MotionMatching"
+            git fetch origin main
+            git reset --hard origin/main
+            chmod +x scripts/deploy.sh
+            export VITE_API_BASE
+            bash scripts/deploy.sh
