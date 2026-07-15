@@ -23,7 +23,7 @@ jobs:
             if [ ! -d "$HOME/MotionMatching/.git" ]; then
               git clone https://github.com/TFUCE/MotionMatching.git "$HOME/MotionMatching"
             fi
-            # 拉到含 deploy.sh 的最新代码后再执行
+            # deploy.sh
             cd "$HOME/MotionMatching"
             git fetch origin main
             git reset --hard origin/main
