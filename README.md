@@ -18,4 +18,3 @@ Then: double-click `start-dev.bat`
 - **Swap paths** — randomly change at least one trajectory
 - **Speed: On/Off** — off = path shape only
 - Results saved to `backend/data/motion_match.db` (`trials` table)
-# MotionMatching
