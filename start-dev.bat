@@ -2,8 +2,8 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 
-if not exist ".venv\Scripts\uvicorn.exe" (
-  echo Missing .venv. Double-click setup.bat first, then try again.
+if not exist "backend\.venv\Scripts\uvicorn.exe" (
+  echo Missing backend\.venv. Double-click setup.bat first, then try again.
   pause
   exit /b 1
 )
@@ -18,7 +18,7 @@ echo Starting backend :8000 and frontend :5173 ...
 echo Close the two terminal windows to stop.
 echo.
 
-start "Motion Match API" /D "%~dp0" cmd /k ".venv\Scripts\uvicorn.exe app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000"
+start "Motion Match API" /D "%~dp0" cmd /k "backend\.venv\Scripts\uvicorn.exe app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000"
 timeout /t 2 /nobreak >nul
 start "Motion Match Web" /D "%~dp0" cmd /k "npm run dev"
 

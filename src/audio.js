@@ -12,7 +12,7 @@ function getCtx() {
   return ctx;
 }
 
-export function playClick(kind = 'tap') {
+export function playClick(kind = 'miss') {
   try {
     const ac = getCtx();
     const t0 = ac.currentTime;
@@ -29,7 +29,7 @@ export function playClick(kind = 'tap') {
       gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
       osc.start(t0);
       osc.stop(t0 + 0.2);
-    } else if (kind === 'miss') {
+    } else {
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(180, t0);
       gain.gain.setValueAtTime(0.0001, t0);
@@ -37,15 +37,6 @@ export function playClick(kind = 'tap') {
       gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.14);
       osc.start(t0);
       osc.stop(t0 + 0.15);
-    } else {
-      // Soft click feedback for each tap
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, t0);
-      gain.gain.setValueAtTime(0.0001, t0);
-      gain.gain.exponentialRampToValueAtTime(0.14, t0 + 0.005);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
-      osc.start(t0);
-      osc.stop(t0 + 0.06);
     }
   } catch {
     // Audio may be blocked until user gesture; ignore.

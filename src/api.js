@@ -30,9 +30,26 @@ export async function getHealth() {
   return request('/health');
 }
 
-export async function submitTrial(payload) {
-  return request('/trials', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+export async function createSession(payload) {
+  return request('/sessions', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function endSession(sessionId) {
+  return request(`/sessions/${sessionId}`, { method: 'PATCH' });
+}
+
+export async function createTask(payload) {
+  return request('/tasks', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function completeTask(taskId, payload) {
+  return request(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+
+export async function createAttempt(payload) {
+  return request('/attempts', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function submitQuestionnaire(payload) {
+  return request('/questionnaires', { method: 'POST', body: JSON.stringify(payload) });
 }

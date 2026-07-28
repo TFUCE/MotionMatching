@@ -259,7 +259,6 @@ export function recognizeStroke(targets, stroke, opts = {}) {
       best: null,
       ranked,
       reason: 'no_match',
-      topScore: top?.score ?? 0,
     };
   }
 
@@ -268,7 +267,6 @@ export function recognizeStroke(targets, stroke, opts = {}) {
     best: top,
     ranked,
     reason: 'ok',
-    topScore: top.score,
   };
 }
 
