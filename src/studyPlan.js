@@ -84,23 +84,29 @@ function buildPart1(pathIds) {
   );
 }
 
-/** Full factorial: every path × Fast / Med / Slow. */
+/**
+ * Full factorial, interleaved: 3 rounds × all 6 paths.
+ * Same path is never consecutive, so speed is not mixed with path learning.
+ */
 function buildPart2(pathIds, index) {
+  const n = pathIds.length;
   const tasks = [];
   let taskNumber = 1;
-  pathIds.forEach((pathId, pathIdx) => {
-    const perm = SPEED_PERMUTATIONS[(index + pathIdx) % SPEED_PERMUTATIONS.length];
-    perm.forEach((speedIdx) => {
+  for (let round = 0; round < SPEED_PERIODS.length; round++) {
+    for (let i = 0; i < n; i++) {
+      const pathIdx = (i + round) % n;
+      const pathId = pathIds[pathIdx];
+      const perm = SPEED_PERMUTATIONS[(index + pathIdx) % SPEED_PERMUTATIONS.length];
       tasks.push(
         makeTaskDef({
           taskNumber: taskNumber++,
           speedEnabled: true,
           pathId,
-          speed: SPEED_PERIODS[speedIdx],
+          speed: SPEED_PERIODS[perm[round]],
         }),
       );
-    });
-  });
+    }
+  }
   return tasks;
 }
 
