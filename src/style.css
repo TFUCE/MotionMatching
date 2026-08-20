@@ -1,5 +1,4 @@
-:root,
-[data-theme="dark"] {
+:root {
   --bg: #0e1512;
   --fg: #e8f0ea;
   --fg-dim: rgba(232, 240, 234, 0.62);
@@ -28,33 +27,6 @@
   --display: "Instrument Serif", Georgia, serif;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
-}
-
-[data-theme="light"] {
-  --bg: #eef3f0;
-  --fg: #1a2420;
-  --fg-dim: rgba(26, 36, 32, 0.62);
-  --accent: #2f7a5a;
-  --accent-2: #c56a2a;
-  --line: rgba(26, 36, 32, 0.14);
-  --ok: #2f7a5a;
-  --bad: #c45c45;
-  --input-bg: rgba(26, 36, 32, 0.04);
-  --btn-primary-bg: #1a2420;
-  --btn-primary-fg: #eef3f0;
-  --atmosphere-1: rgba(47, 122, 90, 0.12);
-  --atmosphere-2: rgba(197, 106, 42, 0.08);
-  --atmosphere-mid: #e4ebe6;
-  --atmosphere-end: #d8e2dc;
-  --canvas-glow: rgba(47, 122, 90, 0.14);
-  --canvas-panel: rgba(26, 36, 32, 0.04);
-  --canvas-panel-intended: rgba(47, 122, 90, 0.10);
-  --canvas-panel-selected: rgba(47, 122, 90, 0.16);
-  --canvas-path: rgba(26, 36, 32, 0.28);
-  --canvas-muted: rgba(26, 36, 32, 0.4);
-  --canvas-label: #1a2420;
-  --stroke-user: rgba(197, 106, 42, 0.9);
-  --stroke-ok: rgba(47, 122, 90, 0.95);
 }
 
 *,
@@ -139,6 +111,17 @@ body,
 
 .result h1.ok {
   color: var(--ok);
+}
+
+.result h1.fail {
+  color: var(--warn, #f0a05a);
+}
+
+.touch-note {
+  margin-top: 10px;
+  font-size: 0.92rem;
+  color: var(--accent);
+  max-width: 36ch;
 }
 
 .lede {
@@ -403,53 +386,6 @@ body,
 
 .instr-list strong {
   color: var(--fg);
-}
-
-.prefs-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 12px;
-  position: relative;
-  z-index: 1;
-}
-
-.pref-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1;
-  min-width: 9rem;
-}
-
-.pref-group > span {
-  font-size: 0.8rem;
-  color: var(--fg-dim);
-}
-
-.seg {
-  display: flex;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.seg button {
-  appearance: none;
-  flex: 1;
-  border: none;
-  background: transparent;
-  color: var(--fg-dim);
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 600;
-  padding: 10px 12px;
-  cursor: pointer;
-}
-
-.seg button.active {
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-fg);
 }
 
 .page.questionnaire {

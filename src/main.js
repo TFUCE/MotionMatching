@@ -17,101 +17,51 @@ import {
   submitQuestionnaire,
 } from './api.js';
 import { t, LIKERT_KEYS, OPEN_KEYS } from './i18n.js';
+import { buildStudyPlan, EVAL_PATH_IDS } from './studyPlan.js';
 
 const app = document.getElementById('app');
+const MAX_ATTEMPTS = 15;
 
-const PATH_CHARS = {
-  L_down_right: 'Two segments, one direction change, straight, open',
-  L_right_down: 'Two segments, one direction change, straight, open',
-  circle: 'Continuous curve, no direction change, curved, closed',
-  diagonal: 'Single segment, no direction change, straight, open',
-  zigzag: 'Four segments, three direction changes, straight, open',
-  U_shape: 'Curved bottom, two direction changes, mixed, open',
-};
-
-const EVAL_PATH_IDS = Object.keys(PATH_LIBRARY);
-const TARGET_COLORS_DARK = ['#e8f0ea', '#7ec8a3', '#f0a05a'];
-const TARGET_COLORS_LIGHT = ['#1a2420', '#2f7a5a', '#c56a2a'];
+const TARGET_COLORS = ['#e8f0ea', '#7ec8a3', '#f0a05a'];
 
 function targetColors() {
-  return state.theme === 'light' ? TARGET_COLORS_LIGHT : TARGET_COLORS_DARK;
+  return TARGET_COLORS;
 }
 
-/* ───────── balanced assignment across ~13 participants ───────── */
-
-function participantIndex(code) {
-  const m = String(code).match(/(\d+)/);
-  if (m) return (parseInt(m[1], 10) - 1 + 1300) % 13;
-  let h = 0;
-  for (let i = 0; i < code.length; i++) h = (h * 31 + code.charCodeAt(i)) | 0;
-  return Math.abs(h) % 13;
+function bestMatch(result) {
+  return result.best ?? result.ranked?.[0] ?? null;
 }
 
-function makeTaskDef({ taskNumber, speedEnabled, pathId, speed }) {
-  const prefix = speedEnabled ? 'path_speed' : 'path_only';
-  return {
-    taskNumber,
-    speedEnabled,
-    conditionId: speedEnabled
-      ? `${prefix}_${pathId}_${speed.speedLabel}`
-      : `${prefix}_${pathId}`,
-    pathId,
-    pathLabel: PATH_LIBRARY[pathId].label,
-    pathCharacteristics: PATH_CHARS[pathId] || null,
-    speedLabel: speed.speedLabel,
-    speedMs: speed.period,
-  };
+function dominantPointerType(stroke) {
+  const counts = {};
+  for (const p of stroke) {
+    const pt = p.pointerType || 'unknown';
+    counts[pt] = (counts[pt] || 0) + 1;
+  }
+  let top = 'unknown';
+  let max = 0;
+  for (const [pt, n] of Object.entries(counts)) {
+    if (n > max) {
+      max = n;
+      top = pt;
+    }
+  }
+  return top;
 }
-
-/** Part 1: 3 path-only tasks. Paths rotate by participant index. */
-function assignPart1Paths(index) {
-  return [0, 1, 2].map((k) => EVAL_PATH_IDS[(index + k) % EVAL_PATH_IDS.length]);
-}
-
-function buildStudyPlan(participantCode) {
-  const index = participantIndex(participantCode);
-  const paths = assignPart1Paths(index);
-  const speeds = [0, 1, 2].map((k) => SPEED_PERIODS[(index + k) % SPEED_PERIODS.length]);
-
-  const part1 = paths.map((pathId, i) =>
-    makeTaskDef({
-      taskNumber: i + 1,
-      speedEnabled: false,
-      pathId,
-      speed: speeds[i],
-    }),
-  );
-
-  const part2 = paths.map((pathId, i) =>
-    makeTaskDef({
-      taskNumber: i + 1,
-      speedEnabled: true,
-      pathId,
-      speed: speeds[i],
-    }),
-  );
-
-  return { part1, part2 };
-}
-
-/* ───────── state ───────── */
 
 const state = {
   screen: 'home',
-  // home | instructions | trial | taskResult | part2Intro | questionnaire | evalEnd
-  lang: localStorage.getItem('mm_lang') === 'zh' ? 'zh' : 'en',
-  theme: localStorage.getItem('mm_theme') === 'light' ? 'light' : 'dark',
   participantCode: localStorage.getItem('mm_participant') || '',
   testingFormat: 'online',
   apiOnline: null,
   sessionId: null,
 
+  practice: [],
   part1: [],
   part2: [],
   currentQueue: [],
   taskIndex: 0,
-  queueKind: 'part1',
-  // part1 | part2
+  queueKind: 'practice',
   currentTaskDef: null,
   currentTaskDbId: null,
 
@@ -133,16 +83,6 @@ const state = {
   startMs: 0,
 };
 
-function tt(key, vars) {
-  return t(state.lang, key, vars);
-}
-
-function applyTheme() {
-  document.documentElement.dataset.theme = state.theme;
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = state.theme === 'dark' ? '#0e1512' : '#eef3f0';
-}
-
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
@@ -151,8 +91,11 @@ function speedEnabled() {
   return !!state.currentTaskDef?.speedEnabled;
 }
 
+function formalTaskCount() {
+  return state.part1.length + state.part2.length;
+}
+
 async function boot() {
-  applyTheme();
   try {
     await getHealth();
     state.apiOnline = true;
@@ -166,6 +109,7 @@ function renderShell() {
   const s = state.screen;
   if (s === 'home') renderHome();
   else if (s === 'instructions') renderInstructions();
+  else if (s === 'part1Intro') renderPart1Intro();
   else if (s === 'trial') renderTrial();
   else if (s === 'taskResult') renderTaskResult();
   else if (s === 'part2Intro') renderPart2Intro();
@@ -184,7 +128,8 @@ function escapeHtml(s) {
 function phaseLabel() {
   const td = state.currentTaskDef;
   if (!td) return '';
-  return td.speedEnabled ? tt('part2') : tt('part1');
+  if (td.practice) return t('practice');
+  return td.speedEnabled ? t('part2') : t('part1');
 }
 
 /* ═══════════ HOME ═══════════ */
@@ -193,65 +138,29 @@ function renderHome() {
   app.innerHTML = `
     <main class="page home">
       <div class="atmosphere" aria-hidden="true"></div>
-      <div class="prefs-bar">
-        <div class="pref-group"><span>${tt('language')}</span>
-          <div class="seg">
-            <button type="button" id="lang-en" class="${state.lang === 'en' ? 'active' : ''}">EN</button>
-            <button type="button" id="lang-zh" class="${state.lang === 'zh' ? 'active' : ''}">中文</button>
-          </div>
-        </div>
-        <div class="pref-group"><span>${tt('theme')}</span>
-          <div class="seg">
-            <button type="button" id="theme-dark" class="${state.theme === 'dark' ? 'active' : ''}">${tt('themeDark')}</button>
-            <button type="button" id="theme-light" class="${state.theme === 'light' ? 'active' : ''}">${tt('themeLight')}</button>
-          </div>
-        </div>
-      </div>
       <header class="brand-block">
-        <p class="brand">${tt('brand')}</p>
-        <h1>${tt('homeTitle')}</h1>
-        <p class="lede">${tt('homeLede')}</p>
+        <p class="brand">${t('brand')}</p>
+        <h1>${t('homeTitle')}</h1>
+        <p class="lede">${t('homeLede')}</p>
+        <p class="lede touch-note">${t('touchRequired')}</p>
       </header>
       <label class="field home-field">
-        <span>${tt('participantCode')}</span>
+        <span>${t('participantCode')}</span>
         <input class="text-input" id="participant" type="text" maxlength="64"
-               placeholder="${escapeHtml(tt('participantPlaceholder'))}" value="${escapeHtml(state.participantCode)}" required />
+               placeholder="${escapeHtml(t('participantPlaceholder'))}" value="${escapeHtml(state.participantCode)}" required />
       </label>
       <label class="field home-field">
-        <span>${tt('testingFormat')}</span>
+        <span>${t('testingFormat')}</span>
         <select class="text-input" id="testing-format">
-          <option value="online" ${state.testingFormat === 'online' ? 'selected' : ''}>${tt('formatOnline')}</option>
-          <option value="in_person" ${state.testingFormat === 'in_person' ? 'selected' : ''}>${tt('formatInPerson')}</option>
+          <option value="online" ${state.testingFormat === 'online' ? 'selected' : ''}>${t('formatOnline')}</option>
+          <option value="in_person" ${state.testingFormat === 'in_person' ? 'selected' : ''}>${t('formatInPerson')}</option>
         </select>
       </label>
       <div class="home-actions">
-        <button class="btn primary" id="btn-start" type="button">${tt('beginStudy')}</button>
+        <button class="btn primary" id="btn-start" type="button">${t('beginStudy')}</button>
       </div>
     </main>
   `;
-
-  document.getElementById('lang-en').onclick = () => {
-    state.lang = 'en';
-    localStorage.setItem('mm_lang', 'en');
-    renderHome();
-  };
-  document.getElementById('lang-zh').onclick = () => {
-    state.lang = 'zh';
-    localStorage.setItem('mm_lang', 'zh');
-    renderHome();
-  };
-  document.getElementById('theme-dark').onclick = () => {
-    state.theme = 'dark';
-    localStorage.setItem('mm_theme', 'dark');
-    applyTheme();
-    renderHome();
-  };
-  document.getElementById('theme-light').onclick = () => {
-    state.theme = 'light';
-    localStorage.setItem('mm_theme', 'light');
-    applyTheme();
-    renderHome();
-  };
 
   const inp = document.getElementById('participant');
   inp.oninput = () => {
@@ -274,6 +183,7 @@ function renderHome() {
 
 async function beginStudy() {
   const plan = buildStudyPlan(state.participantCode);
+  state.practice = plan.practice;
   state.part1 = plan.part1;
   state.part2 = plan.part2;
 
@@ -301,23 +211,47 @@ function renderInstructions() {
     <main class="page home">
       <div class="atmosphere" aria-hidden="true"></div>
       <header class="brand-block">
-        <p class="brand sm">${tt('brand')}</p>
-        <h1>${tt('howItWorks')}</h1>
+        <p class="brand sm">${t('brand')}</p>
+        <h1>${t('howItWorks')}</h1>
+        <p class="lede touch-note">${t('touchRequired')}</p>
       </header>
       <div class="instructions-body">
         <ol class="instr-list">
-          <li>${tt('instr1')}</li>
-          <li>${tt('instr2', { n: state.part1.length })}</li>
-          <li>${tt('instr3', { n: state.part2.length })}</li>
+          <li>${t('instr1')}</li>
+          <li>${t('instr2', { n: state.practice.length })}</li>
+          <li>${t('instr3', { n: state.part1.length })}</li>
+          <li>${t('instr4', { n: state.part2.length })}</li>
         </ol>
       </div>
       <div class="home-actions">
-        <button class="btn primary" id="btn-start-part1" type="button">${tt('startPart1')}</button>
+        <button class="btn primary" id="btn-start-practice" type="button">${t('startPractice')}</button>
       </div>
     </main>
   `;
 
-  document.getElementById('btn-start-part1').onclick = () => {
+  document.getElementById('btn-start-practice').onclick = () => {
+    state.queueKind = 'practice';
+    state.currentQueue = state.practice;
+    state.taskIndex = 0;
+    startNextTask();
+  };
+}
+
+function renderPart1Intro() {
+  app.innerHTML = `
+    <main class="page home">
+      <div class="atmosphere" aria-hidden="true"></div>
+      <header class="brand-block">
+        <p class="brand sm">${t('brand')}</p>
+        <h1>${t('part1Title')}</h1>
+        <p class="lede">${t('part1Lede', { n: state.part1.length })}</p>
+      </header>
+      <div class="home-actions">
+        <button class="btn primary" id="btn-part1" type="button">${t('startPart1')}</button>
+      </div>
+    </main>
+  `;
+  document.getElementById('btn-part1').onclick = () => {
     state.queueKind = 'part1';
     state.currentQueue = state.part1;
     state.taskIndex = 0;
@@ -330,12 +264,12 @@ function renderPart2Intro() {
     <main class="page home">
       <div class="atmosphere" aria-hidden="true"></div>
       <header class="brand-block">
-        <p class="brand sm">${tt('brand')}</p>
-        <h1>${tt('part2Title')}</h1>
-        <p class="lede">${tt('part2Lede', { n: state.part2.length })}</p>
+        <p class="brand sm">${t('brand')}</p>
+        <h1>${t('part2Title')}</h1>
+        <p class="lede">${t('part2Lede', { n: state.part2.length })}</p>
       </header>
       <div class="home-actions">
-        <button class="btn primary" id="btn-part2" type="button">${tt('startPart2')}</button>
+        <button class="btn primary" id="btn-part2" type="button">${t('startPart2')}</button>
       </div>
     </main>
   `;
@@ -350,6 +284,11 @@ function renderPart2Intro() {
 /* ═══════════ TASK LIFECYCLE ═══════════ */
 
 function advanceAfterQueue() {
+  if (state.queueKind === 'practice') {
+    state.screen = 'part1Intro';
+    renderShell();
+    return;
+  }
   if (state.queueKind === 'part1') {
     state.screen = 'part2Intro';
     renderShell();
@@ -377,15 +316,16 @@ async function startNextTask() {
   state.selectedId = null;
   state.attemptIndex = 0;
   state.errorCount = 0;
-  state.taskStartMs = performance.now();
+  state.taskStartMs = 0;
   state.lastMessage = '';
   state.lastResult = null;
 
   if (state.apiOnline && state.sessionId) {
     try {
-      const t = await createTask({
+      const row = await createTask({
         session_id: state.sessionId,
         task_number: taskDef.taskNumber,
+        practice: !!taskDef.practice,
         speed_enabled: taskDef.speedEnabled,
         condition_id: taskDef.conditionId,
         path_id: taskDef.pathId,
@@ -395,7 +335,7 @@ async function startNextTask() {
         speed_ms: taskDef.speedMs,
         target_count: 3,
       });
-      state.currentTaskDbId = t.id;
+      state.currentTaskDbId = row.id;
     } catch (e) {
       console.warn('Task creation failed', e);
     }
@@ -460,6 +400,87 @@ async function finishStudy() {
   renderShell();
 }
 
+function taskElapsedMs() {
+  if (!state.taskStartMs) return 0;
+  return Math.round(performance.now() - state.taskStartMs);
+}
+
+async function finalizeTaskSuccess(result) {
+  const top = result.best;
+  const elapsed = taskElapsedMs();
+
+  if (state.apiOnline && state.currentTaskDbId) {
+    try {
+      await completeTask(state.currentTaskDbId, {
+        completed: true,
+        success_attempt_index: state.attemptIndex,
+        total_attempts: state.attemptIndex,
+        error_count: state.errorCount,
+        completion_time_ms: elapsed,
+      });
+    } catch (e) {
+      console.warn('completeTask failed', e);
+    }
+  }
+
+  state.lastResult = {
+    failed: false,
+    score: top.score,
+    attempts: state.attemptIndex,
+    errors: state.errorCount,
+    elapsedMs: elapsed,
+    ranked: result.ranked.map((r) => ({
+      id: r.target.id,
+      label: r.target.label,
+      speed: r.target.speedLabel,
+      score: Number(r.score.toFixed(3)),
+    })),
+  };
+
+  updateHud();
+  setTimeout(() => {
+    state.screen = 'taskResult';
+    renderShell();
+  }, 800);
+}
+
+async function finalizeTaskFailure() {
+  const elapsed = taskElapsedMs();
+
+  if (state.apiOnline && state.currentTaskDbId) {
+    try {
+      await completeTask(state.currentTaskDbId, {
+        completed: true,
+        success_attempt_index: null,
+        total_attempts: state.attemptIndex,
+        error_count: state.errorCount,
+        completion_time_ms: elapsed,
+      });
+    } catch (e) {
+      console.warn('completeTask failed', e);
+    }
+  }
+
+  state.lastResult = {
+    failed: true,
+    attempts: state.attemptIndex,
+    errors: state.errorCount,
+    elapsedMs: elapsed,
+    ranked: [],
+  };
+
+  state.screen = 'taskResult';
+  renderShell();
+}
+
+async function checkMaxAttempts() {
+  if (state.attemptIndex < MAX_ATTEMPTS) return false;
+  state.lastMessage = t('maxAttempts');
+  playClick('miss');
+  await finalizeTaskFailure();
+  return true;
+}
+
 /* ═══════════ TRIAL ═══════════ */
 
 function renderTrial() {
@@ -469,17 +490,17 @@ function renderTrial() {
   const intended = state.intendedTarget;
   const modeHint = td.speedEnabled
     ? `${td.pathLabel} · ${td.speedLabel}`
-    : `${td.pathLabel} · ${tt('matchPathOnly')}`;
+    : `${td.pathLabel} · ${t('matchPathOnly')}`;
 
   app.innerHTML = `
     <main class="page trial">
       <header class="trial-bar">
-        <button class="back subtle" id="btn-exit" type="button">${tt('exit')}</button>
+        <button class="back subtle" id="btn-exit" type="button">${t('exit')}</button>
         <div class="trial-status">
           <span class="mode-pill">${phaseLabel()} · ${progress}</span>
-          <span class="intend">${tt('matchTarget')} <strong>${intended?.label || '?'}</strong> · ${modeHint}</span>
+          <span class="intend">${t('matchTarget')} <strong>${intended?.label || '?'}</strong> · ${modeHint}</span>
         </div>
-        <button class="back subtle" id="btn-clear" type="button">${tt('clear')}</button>
+        <button class="back subtle" id="btn-clear" type="button">${t('clear')}</button>
       </header>
 
       <div class="stage-wrap">
@@ -488,16 +509,16 @@ function renderTrial() {
       </div>
 
       <footer class="trial-foot">
-        <p class="speed-live" id="speed-live" ${td.speedEnabled ? '' : 'hidden'}>${tt('yourSpeed')}: —</p>
+        <p class="speed-live" id="speed-live" ${td.speedEnabled ? '' : 'hidden'}>${t('yourSpeed')}: —</p>
         <p class="foot-hint" id="foot-hint">${
-          td.speedEnabled ? tt('hintPathSpeed') : tt('hintPathOnly')
+          td.speedEnabled ? t('hintPathSpeed') : t('hintPathOnly')
         }</p>
       </footer>
     </main>
   `;
 
   document.getElementById('btn-exit').onclick = () => {
-    if (confirm(tt('exitConfirm'))) {
+    if (confirm(t('exitConfirm'))) {
       cancelAnim();
       state.screen = 'home';
       renderShell();
@@ -521,6 +542,7 @@ function renderTrial() {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
       t: performance.now() - state.startMs,
+      pointerType: e.pointerType || 'unknown',
     };
   };
 
@@ -557,6 +579,13 @@ function renderTrial() {
   layer.addEventListener('pointercancel', onUp, { passive: false });
 
   state.startMs = performance.now();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (state.screen === 'trial') {
+        state.taskStartMs = performance.now();
+      }
+    });
+  });
   loop();
 }
 
@@ -567,13 +596,35 @@ function resetAttempt() {
   state.lastMessage = '';
 }
 
+function strokePayloadFrom(stroke) {
+  return stroke.map((p) => ({
+    x: Number(p.x.toFixed(1)),
+    y: Number(p.y.toFixed(1)),
+    t: Number((p.t ?? 0).toFixed(1)),
+    pointerType: p.pointerType || 'unknown',
+  }));
+}
+
 async function finishStroke() {
   const len = strokeLength(state.stroke);
+  const strokePayload = strokePayloadFrom(state.stroke);
+  const pointerType = dominantPointerType(state.stroke);
+
   if (state.stroke.length < 8 || len < 40) {
+    state.attemptIndex++;
+    state.errorCount++;
     state.stroke = [];
-    state.lastMessage = tt('strokeTooShort');
+    state.lastMessage = t('strokeTooShort');
     playClick('miss');
+    await submitAttempt(
+      false,
+      { best: null, ranked: [] },
+      strokePayload,
+      'too_short',
+      pointerType,
+    );
     updateHud();
+    if (await checkMaxAttempts()) return;
     return;
   }
   if (state.selectedId) return;
@@ -581,68 +632,32 @@ async function finishStroke() {
   state.attemptIndex++;
   const useSpeed = speedEnabled();
   const result = recognizeStroke(state.targets, state.stroke, { useSpeed });
+  const top = bestMatch(result);
+  const isCorrect = result.confident && result.best?.target.id === state.intendedTarget.id;
 
-  const strokePayload = state.stroke.map((p) => ({
-    x: Number(p.x.toFixed(1)),
-    y: Number(p.y.toFixed(1)),
-    t: Number((p.t ?? 0).toFixed(1)),
-  }));
-
-  const elapsed = performance.now() - state.taskStartMs;
-  const isCorrect = result.confident && result.best.target.id === state.intendedTarget.id;
-
-  if (result.confident && isCorrect) {
+  if (isCorrect) {
     state.selectedId = result.best.target.id;
     playClick('success');
-    await submitAttempt(true, result, strokePayload);
-
-    if (state.apiOnline && state.currentTaskDbId) {
-      try {
-        await completeTask(state.currentTaskDbId, {
-          completed: true,
-          success_attempt_index: state.attemptIndex,
-          total_attempts: state.attemptIndex,
-          error_count: state.errorCount,
-          completion_time_ms: Math.round(elapsed),
-        });
-      } catch (e) {
-        console.warn('completeTask failed', e);
-      }
-    }
-
-    state.lastResult = {
-      score: result.best.score,
-      attempts: state.attemptIndex,
-      errors: state.errorCount,
-      elapsedMs: Math.round(elapsed),
-      ranked: result.ranked.map((r) => ({
-        id: r.target.id,
-        label: r.target.label,
-        speed: r.target.speedLabel,
-        score: Number(r.score.toFixed(3)),
-      })),
-    };
-
-    updateHud();
-    setTimeout(() => {
-      state.screen = 'taskResult';
-      renderShell();
-    }, 800);
+    await submitAttempt(true, result, strokePayload, 'ok', pointerType);
+    await finalizeTaskSuccess(result);
     return;
   }
 
   state.errorCount++;
   const reason = result.confident ? 'wrong_target' : result.reason || 'no_match';
-  await submitAttempt(false, result, strokePayload, reason);
+  await submitAttempt(false, result, strokePayload, reason, pointerType);
 
   state.lastMessage = result.confident
-    ? tt('wrongTarget', {
+    ? t('wrongTarget', {
         got: result.best.target.label,
         want: state.intendedTarget.label,
       })
-    : tt('noMatch');
+    : t('noMatch');
   playClick('miss');
   updateHud();
+
+  if (await checkMaxAttempts()) return;
+
   setTimeout(() => {
     if (!state.selectedId) {
       state.stroke = [];
@@ -651,21 +666,21 @@ async function finishStroke() {
   }, 500);
 }
 
-async function submitAttempt(success, result, strokePayload, reason = null) {
+async function submitAttempt(success, result, strokePayload, reason = null, pointerType = null) {
   if (!state.apiOnline || !state.currentTaskDbId) return;
-  const best = result.best;
+  const top = bestMatch(result);
   try {
     await createAttempt({
       task_id: state.currentTaskDbId,
       attempt_index: state.attemptIndex,
       success,
-      matched_target_id: best?.target?.id || null,
-      matched_label: best?.target?.label || null,
-      elapsed_ms: Math.round(performance.now() - state.taskStartMs),
-      score: best ? Number(best.score.toFixed(3)) : 0,
-      shape_score: best ? Number((best.shape ?? 0).toFixed(3)) : 0,
-      speed_score: best ? Number((best.speed ?? 0).toFixed(3)) : 0,
-      point_count: state.stroke.length,
+      matched_target_id: top?.target?.id || null,
+      matched_label: top?.target?.label || null,
+      elapsed_ms: taskElapsedMs(),
+      score: top ? Number(top.score.toFixed(3)) : 0,
+      shape_score: top ? Number((top.shape ?? 0).toFixed(3)) : 0,
+      speed_score: top ? Number((top.speed ?? 0).toFixed(3)) : 0,
+      point_count: strokePayload.length,
       stroke: strokePayload,
       ranked: result.ranked.map((r) => ({
         id: r.target.id,
@@ -677,6 +692,7 @@ async function submitAttempt(success, result, strokePayload, reason = null) {
         speedScore: Number((r.speed ?? 0).toFixed(3)),
       })),
       reason: reason || (success ? 'ok' : 'no_match'),
+      pointer_type: pointerType,
     });
   } catch (e) {
     console.warn('submitAttempt failed', e);
@@ -697,24 +713,23 @@ function renderTaskResult() {
 
   const modeText = td.speedEnabled
     ? `${td.pathLabel} ${td.speedLabel}`
-    : `${td.pathLabel} ${tt('pathOnlyTag')}`;
+    : `${td.pathLabel} ${t('pathOnlyTag')}`;
   const moreInQueue = state.taskIndex + 1 < state.currentQueue.length;
-  let nextLabel = tt('nextTask');
+  let nextLabel = t('nextTask');
   if (!moreInQueue) {
-    nextLabel = state.queueKind === 'part1' ? tt('continuePart2') : tt('finishStudy');
+    if (state.queueKind === 'practice') nextLabel = t('continuePart1');
+    else if (state.queueKind === 'part1') nextLabel = t('continuePart2');
+    else nextLabel = t('finishStudy');
   }
 
-  app.innerHTML = `
-    <main class="page result">
-      <p class="brand sm">${tt('brand')}</p>
-      <h1 class="ok">${tt('taskComplete')}</h1>
-      <p class="lede tight">
-        ${phaseLabel()} · ${state.taskIndex + 1} / ${state.currentQueue.length}<br>
-        ${tt('target')}: ${state.intendedTarget.label} · ${modeText}<br>
-        ${tt('score')}: ${r.score.toFixed(2)} · ${tt('attempts')}: ${r.attempts} · ${tt('errors')}: ${r.errors} · ${tt('time')}: ${(r.elapsedMs / 1000).toFixed(1)}s
-      </p>
+  const title = r.failed ? t('taskFailed') : t('taskComplete');
+  const titleClass = r.failed ? 'fail' : 'ok';
+  const scoreLine = r.failed
+    ? `${t('attempts')}: ${r.attempts} · ${t('errors')}: ${r.errors} · ${t('time')}: ${(r.elapsedMs / 1000).toFixed(1)}s`
+    : `${t('score')}: ${r.score.toFixed(2)} · ${t('attempts')}: ${r.attempts} · ${t('errors')}: ${r.errors} · ${t('time')}: ${(r.elapsedMs / 1000).toFixed(1)}s`;
 
-      <ul class="score-list">
+  const rankedHtml = r.ranked?.length
+    ? `<ul class="score-list">
         ${r.ranked
           .map(
             (row, i) => `
@@ -726,8 +741,19 @@ function renderTaskResult() {
           </li>`,
           )
           .join('')}
-      </ul>
+      </ul>`
+    : '';
 
+  app.innerHTML = `
+    <main class="page result">
+      <p class="brand sm">${t('brand')}</p>
+      <h1 class="${titleClass}">${title}</h1>
+      <p class="lede tight">
+        ${phaseLabel()} · ${state.taskIndex + 1} / ${state.currentQueue.length}<br>
+        ${t('target')}: ${state.intendedTarget.label} · ${modeText}<br>
+        ${scoreLine}
+      </p>
+      ${rankedHtml}
       <div class="home-actions">
         <button class="btn primary" id="btn-next" type="button">${nextLabel}</button>
       </div>
@@ -748,11 +774,11 @@ function renderQuestionnaire() {
   const likertHtml = LIKERT_KEYS.map(
     (key) => `
     <div class="likert-item" data-key="${key}">
-      <p>${tt(key)}</p>
+      <p>${t(key)}</p>
       <div class="scale-ends">
-        <span>${tt('scaleDisagree')}</span>
-        <span>${tt('scaleHint')}</span>
-        <span>${tt('scaleAgree')}</span>
+        <span>${t('scaleDisagree')}</span>
+        <span>${t('scaleHint')}</span>
+        <span>${t('scaleAgree')}</span>
       </div>
       <div class="likert-scale">
         ${[1, 2, 3, 4, 5, 6, 7]
@@ -771,7 +797,7 @@ function renderQuestionnaire() {
   const openHtml = OPEN_KEYS.map(
     (key) => `
     <div class="open-item">
-      <label for="${key}">${tt(key)} <span style="color:var(--fg-dim)">${tt('openOptional')}</span></label>
+      <label for="${key}">${t(key)} <span style="color:var(--fg-dim)">${t('openOptional')}</span></label>
       <textarea id="${key}" name="${key}" rows="3"></textarea>
     </div>`,
   ).join('');
@@ -780,17 +806,17 @@ function renderQuestionnaire() {
     <main class="page questionnaire">
       <div class="atmosphere" aria-hidden="true"></div>
       <header class="brand-block">
-        <p class="brand sm">${tt('brand')}</p>
-        <h1>${tt('questionnaireTitle')}</h1>
-        <p class="lede">${tt('questionnaireLede')}</p>
+        <p class="brand sm">${t('brand')}</p>
+        <h1>${t('questionnaireTitle')}</h1>
+        <p class="lede">${t('questionnaireLede')}</p>
       </header>
       <form class="questionnaire-form" id="questionnaire-form">
         ${likertHtml}
-        <h2>${tt('openTitle')}</h2>
+        <h2>${t('openTitle')}</h2>
         ${openHtml}
         <p class="form-error" id="form-error" hidden></p>
         <div class="home-actions">
-          <button class="btn primary" id="btn-submit-q" type="submit">${tt('submitQuestionnaire')}</button>
+          <button class="btn primary" id="btn-submit-q" type="submit">${t('submitQuestionnaire')}</button>
         </div>
       </form>
     </main>
@@ -808,7 +834,7 @@ function renderQuestionnaire() {
     for (const key of LIKERT_KEYS) {
       const checked = form.querySelector(`input[name="${key}"]:checked`);
       if (!checked) {
-        errEl.textContent = tt('requiredRatings');
+        errEl.textContent = t('requiredRatings');
         errEl.hidden = false;
         return;
       }
@@ -823,13 +849,13 @@ function renderQuestionnaire() {
     }
 
     btn.disabled = true;
-    btn.textContent = tt('submitting');
+    btn.textContent = t('submitting');
 
     if (state.apiOnline && state.sessionId) {
       try {
         await submitQuestionnaire({
           session_id: state.sessionId,
-          language: state.lang,
+          language: 'en',
           ratings,
           open_answers,
         });
@@ -847,17 +873,16 @@ function renderQuestionnaire() {
 
 function renderEvalEnd() {
   cancelAnim();
-  const formalCount = state.part1.length + state.part2.length;
   app.innerHTML = `
     <main class="page home">
       <div class="atmosphere" aria-hidden="true"></div>
       <header class="brand-block">
-        <p class="brand">${tt('thankYou')}</p>
-        <h1>${tt('evalComplete')}</h1>
-        <p class="lede">${tt('evalCompleteLede', { n: formalCount })}</p>
+        <p class="brand">${t('thankYou')}</p>
+        <h1>${t('evalComplete')}</h1>
+        <p class="lede">${t('evalCompleteLede', { n: formalTaskCount() })}</p>
       </header>
       <div class="home-actions">
-        <button class="btn ghost" id="btn-restart" type="button">${tt('startNew')}</button>
+        <button class="btn ghost" id="btn-restart" type="button">${t('startNew')}</button>
       </div>
     </main>
   `;
@@ -880,7 +905,7 @@ function updateUserSpeedHud() {
   }
   el.hidden = false;
   if (state.stroke.length < 2) {
-    el.textContent = `${tt('yourSpeed')}: —`;
+    el.textContent = `${t('yourSpeed')}: —`;
     return;
   }
   const v = userAvgSpeed(state.stroke);
@@ -892,8 +917,8 @@ function updateUserSpeedHud() {
     }))
     .sort((a, b) => a.diff - b.diff)[0];
   el.textContent = nearest
-    ? `${tt('yourSpeed')}: ${v.toFixed(2)} u/s · ${tt('closest')} ${nearest.label} (${nearest.targetSp.toFixed(2)})`
-    : `${tt('yourSpeed')}: ${v.toFixed(2)} u/s`;
+    ? `${t('yourSpeed')}: ${v.toFixed(2)} u/s · ${t('closest')} ${nearest.label} (${nearest.targetSp.toFixed(2)})`
+    : `${t('yourSpeed')}: ${v.toFixed(2)} u/s`;
 }
 
 function updateHud() {
@@ -902,16 +927,16 @@ function updateHud() {
   updateUserSpeedHud();
 
   if (state.selectedId) {
-    const t = state.targets.find((x) => x.id === state.selectedId);
-    hint.textContent = tt('matchedCorrect', { label: t?.label ?? '' });
+    const tgt = state.targets.find((x) => x.id === state.selectedId);
+    hint.textContent = t('matchedCorrect', { label: tgt?.label ?? '' });
   } else if (state.lastMessage) {
     hint.textContent = state.lastMessage;
   } else if (state.drawing) {
-    hint.textContent = tt('drawing');
+    hint.textContent = t('drawing');
   } else {
     hint.textContent = speedEnabled()
-      ? tt('hintIdleSpeed', { label: state.intendedTarget?.label || '?' })
-      : tt('hintIdlePath', { label: state.intendedTarget?.label || '?' });
+      ? t('hintIdleSpeed', { label: state.intendedTarget?.label || '?' })
+      : t('hintIdlePath', { label: state.intendedTarget?.label || '?' });
   }
 }
 
@@ -986,7 +1011,7 @@ function draw() {
   ctx.fillStyle = canvasMuted || 'rgba(232, 240, 234, 0.35)';
   ctx.font = '500 11px "DM Sans", sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(tt('drawBelow'), w / 2, layout.drawTop + 16);
+  ctx.fillText(t('drawBelow'), w / 2, layout.drawTop + 16);
 
   state.targets.forEach((target, i) => {
     const demo = layout.demos[i];

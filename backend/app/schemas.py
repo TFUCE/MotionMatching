@@ -22,6 +22,7 @@ class SessionOut(BaseModel):
 class TaskCreate(BaseModel):
     session_id: int
     task_number: int = Field(ge=1)
+    practice: bool = False
     speed_enabled: bool = True
     condition_id: str
     path_id: str
@@ -36,6 +37,7 @@ class TaskOut(BaseModel):
     id: int
     session_id: int
     task_number: int
+    practice: bool
     speed_enabled: bool
     condition_id: str
     path_id: str
@@ -77,6 +79,7 @@ class AttemptCreate(BaseModel):
     stroke: list[Any] = Field(default_factory=list)
     ranked: list[RankedScore] = Field(default_factory=list)
     reason: str | None = None
+    pointer_type: str | None = None
 
 
 class AttemptOut(BaseModel):
@@ -92,6 +95,7 @@ class AttemptOut(BaseModel):
     speed_score: float
     point_count: int
     reason: str | None
+    pointer_type: str | None
     created_at: datetime
     model_config = {"from_attributes": True}
 

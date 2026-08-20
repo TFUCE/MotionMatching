@@ -32,8 +32,17 @@ def ensure_schema() -> None:
             conn.execute(
                 text("ALTER TABLE tasks ADD COLUMN speed_enabled TINYINT(1) NOT NULL DEFAULT 1")
             )
-        if "practice" in cols:
-            conn.execute(text("ALTER TABLE tasks DROP COLUMN practice"))
+        if "practice" not in cols:
+            conn.execute(
+                text("ALTER TABLE tasks ADD COLUMN practice TINYINT(1) NOT NULL DEFAULT 0")
+            )
+    if "attempts" in insp.get_table_names():
+        attempt_cols = {c["name"] for c in insp.get_columns("attempts")}
+        with engine.begin() as conn:
+            if "pointer_type" not in attempt_cols:
+                conn.execute(
+                    text("ALTER TABLE attempts ADD COLUMN pointer_type VARCHAR(16) NULL")
+                )
 
 
 @app.on_event("startup")
@@ -78,6 +87,7 @@ def create_task(payload: schemas.TaskCreate, db: Session = Depends(get_db)):
     task = models.Task(
         session_id=payload.session_id,
         task_number=payload.task_number,
+        practice=payload.practice,
         speed_enabled=payload.speed_enabled,
         condition_id=payload.condition_id,
         path_id=payload.path_id,
@@ -127,6 +137,7 @@ def create_attempt(payload: schemas.AttemptCreate, db: Session = Depends(get_db)
         stroke_json=json.dumps(payload.stroke) if payload.stroke else None,
         ranked_json=json.dumps([r.model_dump() for r in payload.ranked]) if payload.ranked else None,
         reason=payload.reason,
+        pointer_type=payload.pointer_type,
     )
     db.add(attempt)
     db.commit()

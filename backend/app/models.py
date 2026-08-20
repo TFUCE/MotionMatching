@@ -51,6 +51,7 @@ class Task(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     session_id: Mapped[int] = mapped_column(Integer, ForeignKey("sessions.id"), index=True)
     task_number: Mapped[int] = mapped_column(Integer)
+    practice: Mapped[bool] = mapped_column(Boolean, default=False)
     speed_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     condition_id: Mapped[str] = mapped_column(String(64))
     path_id: Mapped[str] = mapped_column(String(32))
@@ -89,6 +90,7 @@ class Attempt(Base):
     stroke_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     ranked_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    pointer_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     task: Mapped["Task"] = relationship(back_populates="attempts")
