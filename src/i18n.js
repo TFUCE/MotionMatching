@@ -4,7 +4,7 @@ const STRINGS = {
   brand: 'Motion Match',
   homeTitle: 'Evaluation Study',
   homeLede:
-    'Practice, then two formal parts: path shapes only, then path and speed. 12 formal tasks in total.',
+    'Practice, then two formal parts: all 6 path shapes, then each path at Fast, Med, and Slow. 24 formal tasks in total.',
   participantCode: 'Participant code',
   participantPlaceholder: 'e.g. P01',
   testingFormat: 'Testing format',
@@ -16,16 +16,16 @@ const STRINGS = {
   howItWorks: 'How it works',
   instr1: 'You will see 3 targets (A, B, C). One is highlighted — match that one.',
   instr2: 'Practice ({n} tasks): get familiar with drawing. Practice data is not scored.',
-  instr3: 'Part 1 ({n} tasks): match the path shape only. Speed does not matter.',
-  instr4: 'Part 2 ({n} tasks): the same 3 paths, each at Fast, Med, and Slow.',
+  instr3: 'Part 1 ({n} tasks): match all 6 path shapes. Speed does not matter; all targets move at Medium.',
+  instr4: 'Part 2 ({n} tasks): the same 6 paths, each at Fast, Med, and Slow.',
   startPractice: 'Start practice',
 
   part1Title: 'Part 1 · Path only',
-  part1Lede: 'Match path shapes only. Speed does not matter. {n} tasks.',
+  part1Lede: 'Match all 6 path shapes. Speed does not matter; all targets move at Medium. {n} tasks.',
   startPart1: 'Start Part 1',
 
   part2Title: 'Part 2 · Path + speed',
-  part2Lede: 'Same 3 paths as Part 1 — now match both shape and speed. {n} tasks.',
+  part2Lede: 'Same 6 paths as Part 1 — now match both shape and speed (Fast, Med, Slow). {n} tasks.',
   startPart2: 'Start Part 2',
 
   exit: 'Exit',

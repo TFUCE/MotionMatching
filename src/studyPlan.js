@@ -10,8 +10,9 @@ const PATH_CHARS = {
 };
 
 export const EVAL_PATH_IDS = Object.keys(PATH_LIBRARY);
+export const MEDIUM_SPEED = SPEED_PERIODS[1];
 
-/** Decouple path and speed: each path gets all 3 speeds in a rotated order. */
+/** Rotate Fast/Med/Slow order so path and speed stay independent. */
 const SPEED_PERMUTATIONS = [
   [0, 1, 2],
   [0, 2, 1],
@@ -46,8 +47,10 @@ export function makeTaskDef({ taskNumber, speedEnabled, pathId, speed, practice 
   };
 }
 
+/** Everyone gets all 6 paths; start index rotates by participant. */
 function assignFormalPaths(index) {
-  return [0, 1, 2].map((k) => EVAL_PATH_IDS[(index + k) % EVAL_PATH_IDS.length]);
+  const n = EVAL_PATH_IDS.length;
+  return Array.from({ length: n }, (_, k) => EVAL_PATH_IDS[(index + k) % n]);
 }
 
 function buildPractice() {
@@ -56,31 +59,32 @@ function buildPractice() {
       taskNumber: 1,
       speedEnabled: false,
       pathId: 'diagonal',
-      speed: SPEED_PERIODS[1],
+      speed: MEDIUM_SPEED,
       practice: true,
     }),
     makeTaskDef({
       taskNumber: 2,
       speedEnabled: false,
       pathId: 'circle',
-      speed: SPEED_PERIODS[0],
+      speed: MEDIUM_SPEED,
       practice: true,
     }),
   ];
 }
 
+/** Path-only: all paths shown at Medium so speed does not confound shape. */
 function buildPart1(pathIds) {
   return pathIds.map((pathId, i) =>
     makeTaskDef({
       taskNumber: i + 1,
       speedEnabled: false,
       pathId,
-      speed: SPEED_PERIODS[i % SPEED_PERIODS.length],
+      speed: MEDIUM_SPEED,
     }),
   );
 }
 
-/** Same 3 paths, each at all 3 speeds — path and speed fully crossed. */
+/** Full factorial: every path × Fast / Med / Slow. */
 function buildPart2(pathIds, index) {
   const tasks = [];
   let taskNumber = 1;

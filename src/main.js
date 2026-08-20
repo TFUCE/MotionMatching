@@ -20,7 +20,7 @@ import { t, LIKERT_KEYS, OPEN_KEYS } from './i18n.js';
 import { buildStudyPlan, EVAL_PATH_IDS } from './studyPlan.js';
 
 const app = document.getElementById('app');
-const MAX_ATTEMPTS = 15;
+const MAX_ATTEMPTS = 5;
 
 const TARGET_COLORS = ['#e8f0ea', '#7ec8a3', '#f0a05a'];
 

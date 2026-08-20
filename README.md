@@ -18,17 +18,17 @@ Evaluation prototype for touchscreen motion-matching.
 
 ## Evaluation design
 
-Use participant codes **P01–P13**. Each person completes practice, then Part 1 (path only) and Part 2 (path + speed).
+Use participant codes **P01–P13**. Every participant completes all 6 path conditions.
 
 | Phase | Mode | Per participant |
 |-------|------|-----------------|
-| Practice | Path only (not scored) | 2 |
-| Part 1 | Path only | 3 |
-| Part 2 | Same 3 paths × 3 speeds | 9 |
+| Practice | Path only, Medium (not scored) | 2 |
+| Part 1 | All 6 paths, path only, Medium | 6 |
+| Part 2 | All 6 paths × Fast / Med / Slow | 18 |
 | Questionnaire | Likert + open questions | 1 |
-| **Formal tasks** | | **12** |
+| **Formal tasks** | | **24** |
 
-Part 2 crosses each path with Fast, Med, and Slow so path and speed can be analyzed independently.
+Part 1 keeps display speed at Medium so path shape is not confounded with speed. Part 2 fully crosses path and speed. Task order rotates by participant code. A task fails after 5 unsuccessful attempts.
 
 ## Data model
 
