@@ -52,6 +52,10 @@ const STRINGS = {
 
   taskComplete: 'Task complete',
   taskFailed: 'Task not completed',
+  practiceComplete: 'Practice complete',
+  part1Complete: 'Part 1 complete',
+  part2Complete: 'Part 2 complete',
+  partCompleteLede: '{phase} · all {n} tasks completed',
   target: 'Target',
   pathOnlyTag: '(path only)',
   score: 'Score',

@@ -20,7 +20,7 @@ import { t, LIKERT_KEYS, OPEN_KEYS } from './i18n.js';
 import { buildStudyPlan, EVAL_PATH_IDS } from './studyPlan.js';
 
 const app = document.getElementById('app');
-const MAX_ATTEMPTS = 5;
+const MAX_ATTEMPTS = 3;
 
 const TARGET_COLORS = ['#e8f0ea', '#7ec8a3', '#f0a05a'];
 
@@ -405,6 +405,22 @@ function taskElapsedMs() {
   return Math.round(performance.now() - state.taskStartMs);
 }
 
+function isLastTaskInQueue() {
+  return state.taskIndex + 1 >= state.currentQueue.length;
+}
+
+function goToNextTaskOrPartResult() {
+  if (isLastTaskInQueue()) {
+    state.screen = 'taskResult';
+    renderShell();
+    return;
+  }
+  setTimeout(() => {
+    state.taskIndex++;
+    startNextTask();
+  }, 700);
+}
+
 async function finalizeTaskSuccess(result) {
   const top = result.best;
   const elapsed = taskElapsedMs();
@@ -438,10 +454,7 @@ async function finalizeTaskSuccess(result) {
   };
 
   updateHud();
-  setTimeout(() => {
-    state.screen = 'taskResult';
-    renderShell();
-  }, 800);
+  goToNextTaskOrPartResult();
 }
 
 async function finalizeTaskFailure() {
@@ -469,8 +482,7 @@ async function finalizeTaskFailure() {
     ranked: [],
   };
 
-  state.screen = 'taskResult';
-  renderShell();
+  goToNextTaskOrPartResult();
 }
 
 async function checkMaxAttempts() {
@@ -714,21 +726,33 @@ function renderTaskResult() {
   const modeText = td.speedEnabled
     ? `${td.pathLabel} ${td.speedLabel}`
     : `${td.pathLabel} ${t('pathOnlyTag')}`;
-  const moreInQueue = state.taskIndex + 1 < state.currentQueue.length;
+  const partDone = isLastTaskInQueue();
   let nextLabel = t('nextTask');
-  if (!moreInQueue) {
+  if (partDone) {
     if (state.queueKind === 'practice') nextLabel = t('continuePart1');
     else if (state.queueKind === 'part1') nextLabel = t('continuePart2');
     else nextLabel = t('finishStudy');
   }
 
-  const title = r.failed ? t('taskFailed') : t('taskComplete');
+  let title = t('taskComplete');
+  if (r.failed) title = t('taskFailed');
+  else if (partDone) {
+    if (state.queueKind === 'practice') title = t('practiceComplete');
+    else if (state.queueKind === 'part1') title = t('part1Complete');
+    else title = t('part2Complete');
+  }
   const titleClass = r.failed ? 'fail' : 'ok';
+  const summaryLine =
+    partDone && !r.failed
+      ? t('partCompleteLede', { phase: phaseLabel(), n: state.currentQueue.length })
+      : `${phaseLabel()} · ${state.taskIndex + 1} / ${state.currentQueue.length}<br>
+        ${t('target')}: ${state.intendedTarget.label} · ${modeText}`;
   const scoreLine = r.failed
     ? `${t('attempts')}: ${r.attempts} · ${t('errors')}: ${r.errors} · ${t('time')}: ${(r.elapsedMs / 1000).toFixed(1)}s`
     : `${t('score')}: ${r.score.toFixed(2)} · ${t('attempts')}: ${r.attempts} · ${t('errors')}: ${r.errors} · ${t('time')}: ${(r.elapsedMs / 1000).toFixed(1)}s`;
 
-  const rankedHtml = r.ranked?.length
+  const rankedHtml =
+    !partDone && r.ranked?.length
     ? `<ul class="score-list">
         ${r.ranked
           .map(
@@ -749,9 +773,7 @@ function renderTaskResult() {
       <p class="brand sm">${t('brand')}</p>
       <h1 class="${titleClass}">${title}</h1>
       <p class="lede tight">
-        ${phaseLabel()} · ${state.taskIndex + 1} / ${state.currentQueue.length}<br>
-        ${t('target')}: ${state.intendedTarget.label} · ${modeText}<br>
-        ${scoreLine}
+        ${summaryLine}${partDone && !r.failed ? '' : `<br>${scoreLine}`}
       </p>
       ${rankedHtml}
       <div class="home-actions">
@@ -761,6 +783,11 @@ function renderTaskResult() {
   `;
 
   document.getElementById('btn-next').onclick = () => {
+    if (partDone) {
+      state.taskIndex++;
+      advanceAfterQueue();
+      return;
+    }
     state.taskIndex++;
     startNextTask();
   };
