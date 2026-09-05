@@ -28,7 +28,7 @@ Use participant codes **P01–P13**. Every participant completes all 6 path cond
 | Questionnaire | Likert + open questions | 1 |
 | **Formal tasks** | | **24** |
 
-Part 1 keeps display speed at Medium so path shape is not confounded with speed. Part 2 fully crosses path and speed, interleaved so the same path is never shown three times in a row. Task order rotates by participant code. A task fails after 3 unsuccessful attempts.
+Part 1 keeps display speed at Medium so path shape is not confounded with speed. Part 2 fully crosses path and speed, interleaved so the same path is never shown three times in a row. Task order rotates by participant code. A task fails after 5 unsuccessful attempts.
 
 ## Data model
 
